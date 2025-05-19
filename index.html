@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>六合彩计算</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            transform: scale(0.7);
+            transform-origin: top center;
+        }
+        .number-grid {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 10px;
+            justify-content: center;
+            max-width: 420px;
+            margin: auto;
+        }
+        .number-box {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .number {
+            width: 50px;
+            height: 50px;
+            line-height: 50px;
+            font-size: 18px;
+            font-weight: bold;
+            text-align: center;
+            border-radius: 50%;
+            color: white;
+        }
+        .red { background-color: red; }
+        .blue { background-color: blue; }
+        .green { background-color: green; }
+        .amount, .profit {
+            width: 50px;
+            text-align: center;
+            margin-top: 5px;
+            font-size: 14px;
+            font-weight: bold;
+            border: none;
+            background: none;
+        }
+        .negative { color: red; }
+        .button-group {
+            margin-top: 20px;
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+        }
+        .zodiac {
+            font-size: 14px;
+            color: #666;
+            margin-top: 3px;
+        }
+    </style>
+</head>
+<body>
+    <input type="text" id="betInput" style="padding: 15px; margin: 15px; width: 80%;" placeholder="输入格式: 01 02 03个号5 或 龙兔各号10 或 红蓝各号50">
+    
+    <div class="button-group">
+        <button onclick="resetBets()">归零</button>
+        <button onclick="undoLastBet()">撤回</button>
+        <button onclick="placeBet()">下注</button>
+    </div>
+    
+    <h3 id="totalBetDisplay">下注总数: 0</h3>
+    <div class="number-grid" id="numbers"></div>
+
+    <script>
+    const numbers = Array.from({ length: 49 }, (_, i) => (i + 1).toString().padStart(2, '0'));
+    const zodiacNumbers = {
+        "蛇": ["01", "13", "25", "37", "49"],
+        "龙": ["02", "14", "26", "38"],
+        "兔": ["03", "15", "27", "39"],
+        "虎": ["04", "16", "28", "40"],
+        "牛": ["05", "17", "29", "41"],
+        "鼠": ["06", "18", "30", "42"],
+        "猪": ["07", "19", "31", "43"],
+        "狗": ["08", "20", "32", "44"],
+        "鸡": ["09", "21", "33", "45"],
+        "猴": ["10", "22", "34", "46"],
+        "羊": ["11", "23", "35", "47"],
+        "马": ["12", "24", "36", "48"]
+    };
+    const colorMap = {
+        "红": ["01", "02", "07", "08", "12", "13", "18", "19", "23", "24", "29", "30", "34", "35", "40", "45", "46"],
+        "蓝": ["03", "04", "09", "10", "14", "15", "20", "25", "26", "31", "36", "37", "41", "42", "47", "48"],
+        "绿": ["05", "06", "11", "16", "17", "21", "22", "27", "28", "32", "33", "38", "39", "43", "44", "49"]
+    };
+
+    let bets = Object.fromEntries(numbers.map(num => [num, 0]));
+    let lastBet = {};
+
+    function placeBet() {
+        lastBet = {};
+        const inputElem = document.getElementById("betInput");
+        let input = inputElem.value.trim();
+        input = quickReplaceInput(input);
+
+        const regex = /(\d{1,2}(?:[ ,.+\-~=%\/”]+\d{1,2})*)\s*(?:个|各|肖个号|肖个数|肖各号|码各|码个|一个买|一个)(?:数|号)?(\d+)|([一-龥]+)\s*(?:号)?(?:个|各|肖个号|肖个数|肖各号|码各|码个|一个买|一个)(?:数|号)?(\d+)(?:[快块米])?/g;
+        let match;
+
+        while ((match = regex.exec(input)) !== null) {
+            if (match[1] && match[2]) {
+                let numList = match[1].split(/[ ,./+、，。;；:：|\-~=%\\”]+/).map(n => n.padStart(2, '0')).filter(n => numbers.includes(n));
+                let betAmount = parseInt(match[2]);
+                numList.forEach(num => {
+                    if (!lastBet[num]) lastBet[num] = 0;
+                    lastBet[num] += betAmount;
+                    bets[num] += betAmount;
+                });
+            } else if (match[3] && match[4]) {
+                let betAmount = parseInt(match[4]);
+                let zodiacList = match[3].split("");
+                zodiacList.forEach(zodiac => {
+                    if (zodiacNumbers[zodiac]) {
+                        zodiacNumbers[zodiac].forEach(num => {
+                            if (!lastBet[num]) lastBet[num] = 0;
+                            lastBet[num] += betAmount;
+                            bets[num] += betAmount;
+                        });
+                    }
+                });
+            }
+        }
+
+        const colorRegex = /(红|蓝|绿)波\s*(?:各号|各数|个号|号个|个数|数个|数各|号各)\s*(\d+)/g;
+        let colorMatch;
+        while ((colorMatch = colorRegex.exec(input)) !== null) {
+            let color = colorMatch[1];
+            let amount = parseInt(colorMatch[2]);
+            let nums = colorMap[color];
+            nums.forEach(num => {
+                if (!lastBet[num]) lastBet[num] = 0;
+                lastBet[num] += amount;
+                bets[num] += amount;
+            });
+        }
+
+        const multiColorRegex = /((?:红|蓝|绿){2,})\s*(?:各号|各数|个号|号个|个数|数个|数各|号各)\s*(\d+)/g;
+        let multiColorMatch;
+        while ((multiColorMatch = multiColorRegex.exec(input)) !== null) {
+            let colors = multiColorMatch[1].split("");
+            let amount = parseInt(multiColorMatch[2]);
+            colors.forEach(color => {
+                if (colorMap[color]) {
+                    colorMap[color].forEach(num => {
+                        if (!lastBet[num]) lastBet[num] = 0;
+                        lastBet[num] += amount;
+                        bets[num] += amount;
+                    });
+                }
+            });
+        }
+
+        const colorOddEvenRegex = /(红|蓝|绿)(波)?(单|双)\s*(?:各号)?\s*(\d+)/g;
+        let coeMatch;
+        while ((coeMatch = colorOddEvenRegex.exec(input)) !== null) {
+            let color = coeMatch[1];
+            let oddEven = coeMatch[3];
+            let amount = parseInt(coeMatch[4]);
+            let nums = colorMap[color].filter(num => {
+                let n = parseInt(num);
+                return oddEven === "单" ? n % 2 === 1 : n % 2 === 0;
+            });
+            nums.forEach(num => {
+                if (!lastBet[num]) lastBet[num] = 0;
+                lastBet[num] += amount;
+                bets[num] += amount;
+            });
+        }
+
+        
+        // 家肖/家禽 = 牛羊马猪狗鸡 各号N
+        const homeAnimalsRegex = /(家肖|家禽)\s*各?号?(\d+)/g;
+        let homeMatch;
+        while ((homeMatch = homeAnimalsRegex.exec(input)) !== null) {
+            let amount = parseInt(homeMatch[2]);
+            let group = ["牛", "羊", "马", "猪", "狗", "鸡"];
+            group.forEach(zodiac => {
+                if (zodiacNumbers[zodiac]) {
+                    zodiacNumbers[zodiac].forEach(num => {
+                        if (!lastBet[num]) lastBet[num] = 0;
+                        lastBet[num] += amount;
+                        bets[num] += amount;
+                    });
+                }
+            });
+        }
+
+        // 野兽/野肖 = 猴鼠龙蛇虎兔 各号N
+        const wildAnimalsRegex = /(野兽|野肖)\s*各?号?(\d+)/g;
+        let wildMatch;
+        while ((wildMatch = wildAnimalsRegex.exec(input)) !== null) {
+            let amount = parseInt(wildMatch[2]);
+            let group = ["猴", "鼠", "龙", "蛇", "虎", "兔"];
+            group.forEach(zodiac => {
+                if (zodiacNumbers[zodiac]) {
+                    zodiacNumbers[zodiac].forEach(num => {
+                        if (!lastBet[num]) lastBet[num] = 0;
+                        lastBet[num] += amount;
+                        bets[num] += amount;
+                    });
+                }
+            });
+        }
+
+        
+        
+        // 扩展：支持“123头各5”或“123头各号5”格式
+        const multiHeadRegex = /([0-4]{1,3})头(?:各号|各数|个号|号个|个数|数个|数各|号各)(\d+)/g;
+        let multiHeadMatch;
+        while ((multiHeadMatch = multiHeadRegex.exec(input)) !== null) {
+            let heads = multiHeadMatch[1].split("");
+            let amount = parseInt(multiHeadMatch[2]);
+            heads.forEach(h => {
+                let headNums = numbers.filter(n => n.startsWith(h));
+                headNums.forEach(num => {
+                    if (!lastBet[num]) lastBet[num] = 0;
+                    lastBet[num] += amount;
+                    bets[num] += amount;
+                });
+            });
+        }
+
+        // N头各号M，例如：1头各号50，表示10-19号各下注50
+        const headRegex = /([0-4])头各号(\d+)/g;
+        let headMatch;
+        while ((headMatch = headRegex.exec(input)) !== null) {
+            let head = parseInt(headMatch[1]);
+            let amount = parseInt(headMatch[2]);
+            let headNums = numbers.filter(n => n.startsWith(head.toString()));
+            headNums.forEach(num => {
+                if (!lastBet[num]) lastBet[num] = 0;
+                lastBet[num] += amount;
+                bets[num] += amount;
+            });
+        }
+
+        
+        // 尾数下注，例如 0尾各号5 表示10, 20, 30, 40各下注5
+                const tailRegex = /([0-9])尾(?:各号|号各|个号|各数|数各|个数|数个)?(\d+)/g;
+        let tailMatch;
+        while ((tailMatch = tailRegex.exec(input)) !== null) {
+            let tailDigit = tailMatch[1];
+            let amount = parseInt(tailMatch[2]);
+            let tailNums = numbers.filter(n => n.endsWith(tailDigit));
+            tailNums.forEach(num => {
+                if (!lastBet[num]) lastBet[num] = 0;
+                lastBet[num] += amount;
+                bets[num] += amount;
+            });
+        }
+
+        
+        // 扩展：支持“123尾各号5”格式，表示尾数为1、2、3的号码各下注5
+        const multiTailRegex = /([0-9]{2,})尾(?:各号|号各|个号|各数|数各|个数|数个)?(\d+)/g;
+        let multiTailMatch;
+        while ((multiTailMatch = multiTailRegex.exec(input)) !== null) {
+            let tailDigits = multiTailMatch[1].split('');
+            let amount = parseInt(multiTailMatch[2]);
+            tailDigits.forEach(tailDigit => {
+                let tailNums = numbers.filter(n => n.endsWith(tailDigit));
+                tailNums.forEach(num => {
+                    if (!lastBet[num]) lastBet[num] = 0;
+                    lastBet[num] += amount;
+                    bets[num] += amount;
+                });
+            });
+        }
+
+        
+// 新增支持：01 02 03数个10 或 红蓝数个20
+const numberEachRegex = /((?:\d{1,2}|[一-龥])+(?:[ ,.+\-~=%\/”、，。;；:：|]?)+(?:\d{1,2}|[一-龥])+?)\s*数个\s*(\d+)/g;
+let numberEachMatch;
+while ((numberEachMatch = numberEachRegex.exec(input)) !== null) {
+    let entries = numberEachMatch[1].split(/[ ,./+、，。;；:：|\-~=%\\”]+/);
+    let betAmount = parseInt(numberEachMatch[2]);
+    entries.forEach(entry => {
+        if (numbers.includes(entry.padStart(2, '0'))) {
+            let num = entry.padStart(2, '0');
+            if (!lastBet[num]) lastBet[num] = 0;
+            lastBet[num] += betAmount;
+            bets[num] += betAmount;
+        } else if (zodiacNumbers[entry]) {
+            zodiacNumbers[entry].forEach(num => {
+                if (!lastBet[num]) lastBet[num] = 0;
+                lastBet[num] += betAmount;
+                bets[num] += betAmount;
+            });
+        } else if (colorMap[entry]) {
+            colorMap[entry].forEach(num => {
+                if (!lastBet[num]) lastBet[num] = 0;
+                lastBet[num] += betAmount;
+                bets[num] += betAmount;
+            });
+        }
+    });
+}
+
+
+        
+// 新增波色下注支持：红蓝绿 各号 / 各数 / 个号 / 号各 / 数各 10
+const flexibleColorRegex = /((?:红|蓝|绿){1,})\s*(?:各号|各数|个号|号各|数各)\s*(\d+)/g;
+let flexibleColorMatch;
+while ((flexibleColorMatch = flexibleColorRegex.exec(input)) !== null) {
+    let colors = flexibleColorMatch[1].split('');
+    let amount = parseInt(flexibleColorMatch[2]);
+    colors.forEach(color => {
+        if (colorMap[color]) {
+            colorMap[color].forEach(num => {
+                if (!lastBet[num]) lastBet[num] = 0;
+                lastBet[num] += amount;
+                bets[num] += amount;
+            });
+        }
+    });
+}
+
+
+        
+// 新增指令：大单、小单、大双、小双 等效于对应号码下注
+const specialGroups = {
+    "大单": numbers.filter(n => parseInt(n) >= 25 && parseInt(n) % 2 === 1),
+    "小单": numbers.filter(n => parseInt(n) <= 24 && parseInt(n) % 2 === 1),
+    "大双": numbers.filter(n => parseInt(n) >= 25 && parseInt(n) % 2 === 0),
+    "小双": numbers.filter(n => parseInt(n) <= 24 && parseInt(n) % 2 === 0),
+};
+
+// 正则匹配如 “大单各号10”
+const specialRegex = /(大单|小单|大双|小双)\s*(?:各号|各数|号各|数各|个号)?\s*(\d+)/g;
+let specialMatch;
+while ((specialMatch = specialRegex.exec(input)) !== null) {
+    const group = specialMatch[1];
+    const amount = parseInt(specialMatch[2]);
+    const nums = specialGroups[group];
+    nums.forEach(num => {
+        if (!lastBet[num]) lastBet[num] = 0;
+        lastBet[num] += amount;
+        bets[num] += amount;
+    });
+}
+
+// 支持多个组合：大单小单大双小双各号10
+const comboRegex = /((?:大单|小单|大双|小双){2,})\s*(?:各号|各数|号各|数各|个号)?\s*(\d+)/g;
+let comboMatch;
+while ((comboMatch = comboRegex.exec(input)) !== null) {
+    let comboText = comboMatch[1]; // 如：大单小双
+    let amount = parseInt(comboMatch[2]);
+    let parts = comboText.match(/大单|小单|大双|小双/g);
+    parts.forEach(part => {
+        const nums = specialGroups[part];
+        nums.forEach(num => {
+            if (!lastBet[num]) lastBet[num] = 0;
+            lastBet[num] += amount;
+            bets[num] += amount;
+        });
+    });
+}
+
+        inputElem.value = '';
+        
+function chineseToNumber(chinese) {
+  const map = { '零': 0, '一': 1, '二': 2, '三': 3, '四': 4, '五': 5, '六': 6, '七': 7, '八': 8, '九': 9 };
+  const unit = { '十': 10, '百': 100, '千': 1000 };
+  let result = 0, temp = 0, lastUnit = 1, hasUnit = false;
+  for (let i = 0; i < chinese.length; i++) {
+    const char = chinese[i];
+    if (char in map) temp = map[char];
+    else if (char in unit) {
+      if (temp === 0 && char === '十') temp = 1;
+      result += temp * unit[char];
+      lastUnit = unit[char]; temp = 0; hasUnit = true;
+    }
+  }
+  if (temp > 0 && hasUnit) result += (lastUnit === 100 ? temp * 10 : temp);
+  else result += temp;
+  return result;
+}
+
+function quickReplaceInput(input) {
+  const symbols = ['+', '/', '-', '.', ','];
+  symbols.forEach(symbol => input = input.split(symbol).join(' '));
+  const zodiac = ['鼠','牛','虎','兔','龙','蛇','马','羊','猴','鸡','狗','猪'];
+  const zodiacRegex = new RegExp(`(${zodiac.join('|')})[^一-龥]*?(?=(${zodiac.join('|')}))`, 'g');
+  input = input.replace(zodiacRegex, (match, p1) => p1);
+  const zodiacToGeRegex = new RegExp(`(${zodiac.join('|')})[^一-龥]*?(?=各)`, 'g');
+  input = input.replace(zodiacToGeRegex, (match, p1) => p1);
+  input = input.replace(/=/g, '各');
+  input = input.replace(/(\d{1,2})[，。](?=\d{1,2}[^一-龥]*各)/g, '$1 ');
+  input = input.replace(/([一二三四五六七八九]?十[一二三四五六七八九]?|[一二三四五六七八九]百[一二三四五六七八九]?十?[一二三四五六七八九]?)/g,
+                        match => chineseToNumber(match));
+  const singleDigitMap = { '零': '0', '一': '1', '二': '2', '三': '3', '四': '4', '五': '5', '六': '6', '七': '7', '八': '8', '九': '9' };
+  input = input.replace(/[零一二三四五六七八九]/g, ch => singleDigitMap[ch]);
+  return input;
+}
+
+
+renderNumbers();
+    }
+
+    function undoLastBet() {
+        Object.keys(lastBet).forEach(num => {
+            bets[num] = Math.max(0, bets[num] - lastBet[num]);
+        });
+        lastBet = {};
+        renderNumbers();
+    }
+
+    function getColor(num) {
+        if (colorMap["红"].includes(num)) return "red";
+        if (colorMap["蓝"].includes(num)) return "blue";
+        if (colorMap["绿"].includes(num)) return "green";
+        return "";
+    }
+
+    function renderNumbers() {
+        const container = document.getElementById("numbers");
+        let totalBet = Object.values(bets).reduce((sum, val) => sum + val, 0);
+
+        let profitData = numbers.map(num => {
+            let winAmount = bets[num] * 47;
+            let profit = totalBet - winAmount;
+            return { num, bet: bets[num], profit };
+        });
+
+        profitData.sort((a, b) => a.profit - b.profit);
+
+        container.innerHTML = profitData.map(({ num, bet, profit }) => {
+            const zodiac = Object.entries(zodiacNumbers).find(([, nums]) => nums.includes(num))?.[0] || "";
+            return `
+                <div class="number-box">
+                    <div class="number ${getColor(num)}">${num}</div>
+                    <div class="zodiac">${zodiac}</div>
+                    <input type="text" class="amount" value="${bet}" readonly>
+                    <input type="text" class="profit ${profit < 0 ? 'negative' : ''}" value="${profit}" readonly>
+                </div>
+            `;
+        }).join('');
+
+        document.getElementById("totalBetDisplay").textContent = "下注总数: " + totalBet;
+    }
+
+    function resetBets() {
+        bets = Object.fromEntries(numbers.map(num => [num, 0]));
+        renderNumbers();
+    }
+
+    renderNumbers();
+    </script>
+
+<div style="margin-top: 40px; font-size: 14px; color: #999;">
+    更新维护Vx：rvv3369 &nbsp;&nbsp; QQ:284888125
+</div>
+
+</body>
+</html>
